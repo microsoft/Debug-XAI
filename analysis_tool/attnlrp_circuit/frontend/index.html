@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Insider for Failure Debugging</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>LLM Insider for Failure Debugging</h1>
+        </header>
+
+        <main>
+            <!-- Section 1: Build Circuit (Model & Inputs) -->
+            <section id="section-setup" class="panel">
+                <h2>1. Setup & Inputs</h2>
+                
+                <!-- Trace Loading (Top) -->
+                <div class="control-group" style="background: #f8f9fa; padding: 10px; border-radius: 4px; border: 1px dashed #ced4da;">
+                    <label><strong>Load from Trace:</strong></label>
+                    <label>Dataset: 
+                        <select id="trace-dataset">
+                            <option value="">-- Select --</option>
+                            <!-- Populated by JS -->
+                        </select>
+                    </label>
+                    <label>Trace: 
+                        <select id="trace-file" disabled>
+                            <option value="">-- Select Dataset First --</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="control-group">
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label>Series: 
+                                <select id="model-series">
+                                    <option value="Qwen3">Qwen3</option>
+                                    <option value="Qwen2">Qwen2</option>
+                                    <option value="OLMo3">OLMo3</option>
+                                </select>
+                            </label>
+                            <label>Model: 
+                                <select id="model-select">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </label>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <label>Revision: 
+                                <select id="model-revision" disabled>
+                                    <option value="">Latest (Default)</option>
+                                </select>
+                            </label>
+                            <label>Path:
+                                <input type="text" id="model-path" value="Qwen/Qwen3-0.6B" style="width: 250px;">
+                            </label>
+                        </div>
+                    </div>
+
+                    <label>DType:
+                        <select id="model-dtype">
+                            <option value="float16">float16</option>
+                            <option value="bfloat16" selected>bfloat16</option>
+                            <option value="float32">float32</option>
+                            <option value="auto">auto</option>
+                        </select>
+                    </label>
+                    <label>LRP Rule:
+                        <select id="model-lrp-rule">
+                            <option value="Attn-LRP" selected>Attn-LRP</option>
+                            <option value="CP-LRP">CP-LRP</option>
+                        </select>
+                    </label>
+                    <label>
+                        <input type="checkbox" id="quant-4bit"> 4-bit Quantization
+                    </label>
+                    <button id="btn-load-model">Load Model</button>
+                    <span id="model-status" class="status">Not Loaded</span>
+                </div>
+
+                <div class="control-group">
+                    <label for="prompt-input">Prompt:</label>
+                    <textarea id="prompt-input" rows="3">After John and Mary went to the store, John gave a bottle of milk to</textarea>
+                </div>
+
+                <div class="control-group">
+                    <label for="prompt-orig-completion">Prompt + Original Completion:</label>
+                    <textarea id="prompt-orig-completion" rows="3"></textarea>
+                </div>
+                
+                <div class="control-group">
+                    <label style="margin-right: 15px;">
+                        <input type="checkbox" id="append-bos"> Append BOS Token
+                    </label>
+                    <label style="margin-right: 15px;">
+                        <input type="checkbox" id="capture-mid"> Attn/MLP Split
+                    </label>
+                    <button id="btn-compute-logits" disabled>Compute Logits</button>
+                    <span id="token-count-display" style="margin-left: 15px; color: #666;"></span>
+                </div>
+            </section>
+
+            <!-- Section: Trace Exploration Data (Hidden by default, shown when trace loaded) -->
+            <section id="section-trace-explore" class="panel hidden">
+                <details>
+                    <summary style="cursor: pointer; font-weight: bold; font-size: 1.2em; margin-bottom: 10px;">Trace Candidate Exploration (Correctness Check)</summary>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 10px;">
+                        <div style="flex: 1; min-width: 400px;">
+                            <h3 style="margin-top: 0;">Current Model Candidates</h3>
+                            <div id="container-explore-original" style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; background: white;">
+                                <!-- Table will be injected here -->
+                            </div>
+                        </div>
+                        <div style="flex: 1; min-width: 400px;">
+                            <h3 id="header-explore-other" style="margin-top: 0;">Other Model Candidates</h3>
+                            <div id="container-explore-4b" style="max-height: 400px; overflow-y: auto; border: 1px solid #ccc; background: white;">
+                                <!-- Table will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </section>
+
+            <!-- Section 1 Output: Logits -->
+            <section id="section-logits" class="panel hidden">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <h2 style="margin: 0;">Logit Analysis (Top-K)</h2>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="add-token-input" placeholder="Token Str or ID" style="padding: 4px; border: 1px solid #ccc; border-radius: 4px; width: 120px;">
+                        <button id="btn-add-token" style="padding: 4px 8px; font-size: 0.9em;">Add Token</button>
+                        <span style="border-left: 1px solid #ccc; height: 20px; margin: 0 5px;"></span>
+                        <label style="font-size: 0.9rem;">Gen Length: <input type="number" id="gen-max-tokens" value="30" min="1" max="200" style="width: 50px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"></label>
+                    </div>
+                </div>
+                <!-- Table -->
+                <div class="scrollable-table" style="margin-top: 10px;">
+                    <table id="logits-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Token ID</th>
+                                <th>Token</th>
+                                <th>Logit</th>
+                                <th>Action</th>
+                                <th>Continual Generation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Selection State for Circuit -->
+                <div id="circuit-selection-info">
+                    <p><strong>Top Predicted:</strong> <span id="top-token-display">-</span></p>
+                    <p><strong>Contrast With:</strong> <span id="contrast-token-display">None</span></p>
+                </div>
+            </section>
+
+            <!-- Section 1.5: Input Attribution -->
+            <section id="section-input-attr" class="panel hidden">
+                <h2>2. Input Attribution Visualization</h2>
+                <div class="controls-row">
+                    <div class="control-col">
+                         <h3>Attribution Config</h3>
+                         <label>Mode:
+                            <select id="attr-bp-mode">
+                                <option value="max_logit">Max Logit</option>
+                                <option value="logit_diff" selected>Logit Difference</option>
+                            </select>
+                         </label>
+                         <div id="attr-diff-strategy-opts">
+                            <label>Strategy:
+                                <select id="attr-bp-strategy">
+                                    <option value="by_topk_avg">By Top-K Avg</option>
+                                    <option value="demean">Demean (Avg All)</option>
+                                    <option value="by_ref_token" selected>By Reference Token</option>
+                                </select>
+                            </label>
+                            <label id="attr-opt-ref">Ref ID: <input type="number" id="attr-bp-ref-id" placeholder="ID"></label>
+                         </div>
+                         <label style="margin-top: 10px; display: block; font-size: 0.9em;">
+                            <input type="checkbox" id="attr-hide-bos" checked> Hide First Token
+                         </label>
+                         <button id="btn-compute-attr">Compute Attribution</button>
+                    </div>
+                    <div class="control-col" style="flex: 2;">
+                        <h3>Attribution Map</h3>
+                        <div id="input-attribution-display" class="attribution-text-box">
+                            <!-- Tokens will be rendered here -->
+                             Click "Compute Attribution" to see results.
+                        </div>
+                        <div style="margin-top: 10px; display: flex; gap: 10px;">
+                            <button id="btn-save-attr-png" style="background-color: #2ecc71; font-size: 0.9em; padding: 4px 10px;">Save PNG</button>
+                            <button id="btn-save-attr-pdf" style="background-color: #e74c3c; font-size: 0.9em; padding: 4px 10px;">Save PDF</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section 2: Circuit Visualization -->
+            <section id="section-circuit" class="panel hidden">
+                <h2>3. Circuit Visualization</h2>
+                
+                <!-- PROGRESS BAR CONTAINER -->
+                <div id="compute-progress-container" style="display: none; margin-bottom: 1rem; border: 1px solid #ddd; padding: 10px; border-radius: 4px; background: #f0f8ff;">
+                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <strong id="progress-status-text">Computation Status...</strong>
+                        <span id="progress-percent-text">0%</span>
+                     </div>
+                     <progress id="compute-progress-bar" value="0" max="100" style="width: 100%; height: 20px;"></progress>
+                </div>
+                
+                <div class="controls-row">
+                    <!-- Column 1: Backprop Config -->
+                    <div class="control-col">
+                        <h3>Backprop Strategy</h3>
+                        <label>Mode:
+                            <select id="bp-mode">
+                                <option value="max_logit">Max Logit (Target Only)</option>
+                                <option value="logit_diff" selected>Logit Difference</option>
+                            </select>
+                        </label>
+                        
+                        <div id="diff-strategy-opts">
+                            <label>Strategy:
+                                <select id="bp-strategy">
+                                    <option value="by_topk_avg" selected>By Top-K Avg</option>
+                                    <option value="demean">Demean (Avg All)</option>
+                                    <option value="by_ref_token">By Reference Token</option>
+                                </select>
+                            </label>
+                            
+                            <div id="opt-topk" class="sub-opt">
+                                <label>K: <input type="number" id="bp-k" value="10" style="width: 50px;"></label>
+                            </div>
+                            
+                            <div id="opt-ref" class="sub-opt hidden">
+                                <label>Ref Token ID: <input type="number" id="bp-ref-id" placeholder="ID"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Layer Config -->
+                    <div class="control-col">
+                        <h3>Layer Connection</h3>
+                        <label>Layers (Comma-sep, increasing): 
+                            <input type="text" id="layers-list" placeholder="e.g. 0, 10, 27" style="width: 100%;">
+                        </label>
+                        <div style="margin-top: 5px;">
+                            <small>Presets:</small>
+                            <button id="btn-layer-default" class="btn-micro">Recommended</button>
+                            <button id="btn-layer-all" class="btn-micro">All Layers</button>
+                        </div>
+                        <button id="btn-compute-circuit" style="margin-top: 10px;">Visualize Connection</button>
+                    </div>
+
+                    <!-- Column 3: Vis Controls -->
+                    <div class="control-col">
+                        <h3>Vis Settings</h3>
+                        <div class="setting-item">
+                            <label><input type="checkbox" id="show-all-tokens"> Show All Tokens</label>
+                        </div>
+                        <div class="setting-item">
+                            <label><input type="checkbox" id="hide-bos-node"> Hide First Token (BOS)</label>
+                        </div>
+                        <div class="setting-item">
+                            <label><input type="checkbox" id="show-node-values" checked> Show Node Values</label>
+                        </div>
+                        
+                        <!-- New Pruning Controls -->
+                        <div class="setting-item">
+                            <label>Pruning Mode:</label>
+                            <select id="pruning-mode" style="width: 100%;">
+                                <option value="by_per_layer_cum_mass_percentile" selected>By Top-P Mass (Layer)</option>
+                                <option value="by_global_threshold">By Global Threshold</option>
+                            </select>
+                        </div>
+                        
+                        <div id="ctrl-top-p" class="setting-item">
+                            <label>Top-P Mass (0-1):</label>
+                            <div class="input-row">
+                                <input type="range" id="vis-top-p" min="0" max="1" step="0.01" value="0.85">
+                                <input type="number" id="val-vis-top-p" min="0" max="1" step="0.01" value="0.85" style="width: 60px;">
+                            </div>
+                        </div>
+
+                        <div id="ctrl-global-thresh" class="setting-item hidden">
+                            <label>Global Threshold:</label>
+                            <div class="input-row">
+                                <input type="number" id="val-global-thresh" value="0.01" step="0.001" style="width: 100%;">
+                            </div>
+                        </div>
+
+                        <div class="setting-item">
+                            <label>Line Strength:</label>
+                            <div class="input-row">
+                                <input type="range" id="vis-strength" min="2" max="20" step="0.1" value="6">
+                                <input type="number" id="val-vis-strength" min="2" max="20" step="0.1" value="6" style="width: 60px;">
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label>Layer Spacing (px):</label>
+                            <div class="input-row">
+                                <input type="range" id="vis-layer-spacing" min="10" max="200" step="10" value="50">
+                                <input type="number" id="val-vis-layer-spacing" min="10" max="200" step="10" value="50" style="width: 60px;">
+                            </div>
+                        </div>
+
+                        <div class="setting-item" style="margin-top: 15px;">
+                            <button id="btn-save-graph" style="width: 48%; background-color: #2ecc71;">Save PNG</button>
+                            <button id="btn-save-pdf" style="width: 48%; background-color: #e74c3c;">Save PDF</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="canvas-container">
+                    <canvas id="circuit-canvas"></canvas>
+                    <div id="tooltip"></div>
+                </div>
+                
+                <div id="vis-legend">
+                     <span class="legend-box pos"></span> Pos Relevance
+                     <span class="legend-box neg"></span> Neg Relevance
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/main.js"></script>
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <div id="loading-message">Processing...</div>
+    </div>
+</body>
+</html>
