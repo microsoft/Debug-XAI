@@ -1,0 +1,8 @@
+/lxt.egg-info
+/build
+*.tex
+.venv
+*.pdf
+__pycache__/
+*.png
+# *.html

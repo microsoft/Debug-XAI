@@ -1,0 +1,274 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f7fa;
+    color: #333;
+}
+
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem 2rem;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+main {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.panel {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.hidden {
+    display: none;
+}
+
+.control-group {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+label {
+    font-weight: 500;
+}
+
+input[type="text"], input[type="number"], textarea, select {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+textarea {
+    width: 100%;
+    max-width: 600px;
+}
+
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background-color: #2980b9;
+}
+
+button:disabled {
+    background-color: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.status {
+    font-style: italic;
+    color: #7f8c8d;
+}
+
+.status.success {
+    color: #27ae60;
+}
+.status.error {
+    color: #c0392b;
+}
+
+/* Logits Table */
+.scrollable-table {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 0.35rem 0.75rem; /* Reduced vertical padding */
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+th {
+    background-color: #f8f9fa;
+    position: sticky;
+    top: 0;
+}
+
+tr:hover {
+    background-color: #f1f1f1;
+}
+
+.btn-select-ref {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    background-color: #9b59b6;
+}
+
+.btn-select-ref.selected {
+    background-color: #27ae60;
+}
+
+/* Circuit Controls */
+.controls-row {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 1rem;
+}
+
+.control-col {
+    flex: 1;
+}
+
+.sub-opt {
+    margin-left: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.setting-item {
+    margin-bottom: 0.8rem;
+}
+
+.input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.input-row input[type="range"] {
+    flex: 1;
+}
+
+/* Canvas */
+#canvas-container {
+    position: relative;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+canvas {
+    display: block;
+    cursor: crosshair;
+}
+
+#tooltip {
+    position: fixed;
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 1000;
+}
+
+/* Legend */
+#vis-legend {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+.legend-box {
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    margin-right: 5px;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+.legend-box.pos { background: rgba(255, 0, 0, 0.6); }
+.legend-box.neg { background: rgba(0, 0, 255, 0.6); }
+
+/* Input Attribution Styles */
+.attribution-text-box {
+    line-height: 1.6;
+    font-size: 1.1em;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    white-space: pre-wrap; /* Preserve spacing */
+    font-family: monospace;
+}
+
+.token-span {
+    padding: 2px 0;
+    margin: 0;
+    border-radius: 2px;
+    transition: background-color 0.2s;
+    cursor: default;
+}
+
+.token-span:hover {
+    outline: 1px solid #333;
+    position: relative;
+    z-index: 10;
+}
+
+/* Loading Overlay */
+#loading-overlay {
+    position: fixed;
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+}
+
+#loading-overlay.hidden {
+    display: none !important;
+}
+
+.spinner {
+    border: 6px solid #f3f3f3;
+    border-top: 6px solid #3498db;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin-bottom: 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+#loading-message {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: #2c3e50;
+}

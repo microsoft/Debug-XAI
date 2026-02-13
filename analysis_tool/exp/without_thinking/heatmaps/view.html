@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attribution Comparison Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; background-color: #f5f5f5; flex-direction: column; }
+        
+        /* Navigation Bar */
+        #nav-bar { background: #333; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #nav-bar h1 { margin: 0; font-size: 18px; margin-right: 20px; }
+        .nav-group { display: flex; align-items: center; gap: 10px; }
+        select { padding: 5px 10px; border-radius: 4px; border: none; background: #fff; color: #333; font-size: 14px; }
+        
+        /* Main Layout */
+        #workspace { display: flex; flex: 1; overflow: hidden; }
+        
+        #sidebar { width: 300px; background: white; border-right: 1px solid #ddd; overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column; }
+        .list-header { padding: 15px; border-bottom: 1px solid #eee; font-weight: bold; background: #fafafa; }
+        .case-item { padding: 10px 15px; border-bottom: 1px solid #eee; cursor: pointer; transition: background 0.2s; }
+        .case-item:hover { background-color: #f0f7ff; }
+        .case-item.active { background-color: #e6f3ff; border-left: 4px solid #2196F3; }
+        .case-meta { font-size: 12px; color: #666; margin-top: 4px; }
+        
+        #main { flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        #header { background: white; padding: 15px 20px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+        .metric-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 14px; font-weight: 500; margin-right: 10px; }
+        .badge-current { background: #e3f2fd; color: #1565c0; }
+        .badge-ref { background: #fce4ec; color: #c2185b; }
+        
+        #content-area { flex-grow: 1; display: flex; padding: 20px; gap: 20px; overflow-y: auto; }
+        .panel { flex: 1; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+        .panel-header { padding: 15px; border-bottom: 1px solid #eee; font-weight: bold; display: flex; justify-content: space-between; }
+        .panel-body { padding: 15px; overflow-y: auto; font-family: 'Courier New', Courier, monospace; line-height: 1.5; font-size: 14px; flex: 1; }
+        .row-container { display: flex; flex: 1; min-height: 0; gap: 20px; }
+        
+        .token { display: inline-block; padding: 0 1px; border-radius: 2px; margin: 0 1px; white-space: pre-wrap; position: relative; cursor: default; }
+        .token:hover { outline: 1px solid #666; }
+        
+        .highlighted-token {
+            outline: 2px solid #ff9800 !important;
+            box-shadow: 0 0 5px rgba(255, 152, 0, 0.5);
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        #tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            white-space: pre;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            font-family: 'Courier New', monospace;
+            border: 1px solid #555;
+        }
+        
+        .loading, .empty-state { display: flex; justify-content: center; align-items: center; height: 100%; color: #888; flex-direction: column; gap: 10px; }
+        #error-msg { color: white; background: #ef5350; padding: 10px 20px; display: none; }
+    </style>
+</head>
+<body>
+    <div id="nav-bar">
+        <h1>Attribution Viewer</h1>
+        
+        <div class="nav-group">
+            <label>Dataset:</label>
+            <select id="bench-select" disabled>
+                <option value="">Loading...</option>
+            </select>
+        </div>
+
+        <div class="nav-group" style="margin-left: 10px; padding-left: 10px; border-left: 1px solid #555;">
+             <label title="Min Current Logit Diff">Cur &gt;</label>
+             <input type="number" id="filter-cur-min" value="2" step="0.5" style="width: 50px; padding: 4px;" onchange="renderSidebar()">
+        </div>
+
+        <div class="nav-group" style="margin-left: 20px; border-left: 1px solid #555; padding-left: 20px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                <input type="checkbox" id="hide-first" checked onchange="reRenderCurrentCase()"> 
+                Hide First Token (BOS)
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 5px; margin-left:10px;">
+                <input type="checkbox" id="hide-special" checked onchange="reRenderCurrentCase()"> 
+                Hide Special
+            </label>
+        </div>
+
+        <div class="nav-group" style="border-left: 1px solid #555; padding-left: 20px;">
+            <label>Norm:</label>
+            <select id="norm-method" onchange="reRenderCurrentCase()">
+                <option value="max">Max Abs (Default)</option>
+                <option value="sum">Sum Abs (Distribution)</option>
+                <option value="sum_signed">Sum Signed (Preserve Sign)</option>
+            </select>
+        </div>
+        
+        <div style="flex-grow: 1;"></div>
+        <button onclick="refreshData()" style="padding: 5px 10px; cursor: pointer;">Refresh</button>
+    </div>
+
+    <div id="error-msg"></div>
+
+    <div id="workspace">
+        <div id="sidebar">
+            <div class="list-header">Cases</div>
+            <div id="case-list">
+                <div class="empty-state">Select a comparison above</div>
+            </div>
+        </div>
+        
+        <div id="main">
+            <div id="header">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px;" id="case-title">Select a case</h2>
+                    <div style="margin-top: 5px;" id="case-subtitle"></div>
+                </div>
+                <div id="case-metrics"></div>
+            </div>
+            
+            <div id="content-area">
+                <div class="loading">Select a case or select dataset</div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // State
+    const state = {
+        bench: null,
+        manifest: null, 
+        currentCaseId: null,
+        currentResult: null
+    };
+
+    // Initialization
+    window.addEventListener('DOMContentLoaded', async () => {
+        document.getElementById('hide-first').addEventListener('change', reRenderCurrentCase);
+        await loadBenchmarks();
+    });
+
+    // Discovery Logic (Parses HTTP Server Directory Listing)
+    async function fetchDir(path) {
+        try {
+            const res = await fetch(path);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const text = await res.text();
+            
+            // Parse HTML links ending in /
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, 'text/html');
+            const links = Array.from(doc.querySelectorAll('a'));
+            
+            // Filter directories (usually end in /) and ignore parent links
+            const dirs = links
+                .map(a => a.getAttribute('href'))
+                .filter(href => href && href.endsWith('/') && !href.startsWith('/') && !href.startsWith('..'))
+                .map(href => href.slice(0, -1)); // Remove trailing slash
+                
+            return dirs;
+        } catch (e) {
+            console.error("Dir listing failed", e);
+            throw e;
+        }
+    }
+
+    async function loadBenchmarks() {
+        const benchSelect = document.getElementById('bench-select');
+        benchSelect.innerHTML = '<option>Loading...</option>';
+        
+        try {
+            const dirs = await fetchDir('./');
+            // Filter out obviously non-data folders if any
+            const benches = dirs.filter(d => !['css', 'js', 'frontend', 'assets', '.git'].includes(d));
+            
+            benchSelect.innerHTML = '<option value="">-- Select Dataset --</option>';
+            benches.forEach(b => {
+                const opt = document.createElement('option');
+                opt.value = b;
+                opt.textContent = b;
+                benchSelect.appendChild(opt);
+            });
+            benchSelect.disabled = false;
+            
+            benchSelect.onchange = (e) => {
+                loadManifest(e.target.value);
+            };
+        } catch (e) {
+            showError("Failed to list benchmarks. Is python http.server running?");
+        }
+    }
+
+    async function loadManifest(bench) {
+        if (!bench) return;
+        state.bench = bench;
+        
+        const listContainer = document.getElementById('case-list');
+        listContainer.innerHTML = '<div class="loading">Loading manifest...</div>';
+        
+        try {
+            const path = `./${bench}/manifest.json`;
+            const res = await fetch(path);
+            if (!res.ok) throw new Error("Manifest not found. Run analysis notebook first.");
+            
+            state.manifest = await res.json();
+            
+            renderSidebar();
+            
+            // Auto-load first
+            if (state.manifest.samples && state.manifest.samples.length > 0) {
+                loadCase(state.manifest.samples[0].sample_id);
+            } else {
+                listContainer.innerHTML = '<div class="empty-state">No cases found</div>';
+            }
+        } catch (e) {
+            showError(`Failed to load manifest: ${e.message}`);
+        }
+    }
+
+    // UI Rendering
+    function renderSidebar() {
+        const listContainer = document.getElementById('case-list');
+        listContainer.innerHTML = '';
+        
+        const samples = state.manifest.samples || [];
+        const curThresh = parseFloat(document.getElementById('filter-cur-min').value);
+        const currentModel = state.manifest.models[0];
+        
+        let count = 0;
+        
+        samples.forEach(item => {
+            const diffs = item.logit_diffs || {};
+            
+            // 1. Current Model Filter
+            const curVal = diffs[currentModel];
+            if (curVal === undefined || curVal <= curThresh) return;
+
+            count++;
+            const el = document.createElement('div');
+            el.className = 'case-item';
+            
+            el.dataset.id = item.sample_id;
+            
+            // Format metrics
+            let metricHtml = '';
+            if (curVal !== undefined) {
+                metricHtml += `<span style="color:${curVal > 2 ? '#d32f2f' : '#666'}">Cur Δ:${curVal.toFixed(2)}</span>`;
+            }
+            
+            // Show Ref 1 Diff if available
+            if (state.manifest.models.length > 1) {
+                 const ref1 = state.manifest.models[1];
+                 const val = diffs[ref1];
+                 if (val !== undefined) {
+                      metricHtml += ` | <span style="color:${val < 2 ? '#1976d2' : '#666'}">Ref Δ:${val.toFixed(2)}</span>`;
+                 }
+            }
+
+            const displayId = String(item.sample_id).substring(0, 12);
+            el.innerHTML = `
+                <div style="font-weight:500;">${displayId}</div>
+                <div class="case-meta">
+                    Target: <b>"${item.ref_token}"</b><br>
+                    ${metricHtml}
+                </div>`;
+            
+            el.onclick = () => loadCase(item.sample_id);
+            listContainer.appendChild(el);
+        });
+
+        if (count === 0) {
+            listContainer.innerHTML = '<div class="empty-state">No cases match filters</div>';
+        }
+    }
+
+    async function loadCase(sampleId) {
+        state.currentCaseId = sampleId;
+        
+        document.querySelectorAll('.case-item').forEach(el => 
+            el.classList.toggle('active', el.dataset.id === String(sampleId))
+        );
+        
+        const contentArea = document.getElementById('content-area');
+        contentArea.innerHTML = '<div class="loading">Loading case data...</div>';
+        hideError();
+
+        try {
+            const models = state.manifest.models || ["current"];
+            
+            // Fetchers
+            const fetchModel = (name) => {
+                return fetch(`./${state.bench}/${name}/${sampleId}.json`).then(r => {
+                    if(!r.ok) throw new Error(`Failed load ${name}`);
+                    return r.json();
+                });
+            };
+
+            const allData = await Promise.all(models.map(m => fetchModel(m)));
+            
+            const combined = {
+                meta: {
+                    sample_id: sampleId,
+                    // Use metadata from first model as baseline
+                    ref_token: allData[0].meta.ref_token || "UNK",
+                    contrast_token: allData[0].meta.contrast_token || "UNK"
+                },
+                modelsData: {}, // Map name -> data
+                modelNames: models
+            };
+            
+            models.forEach((name, idx) => {
+                combined.modelsData[name] = allData[idx];
+            });
+            
+            // Augment Meta from manifest
+            const mItem = state.manifest.samples.find(s => s.sample_id === sampleId);
+            if (mItem) {
+                 combined.meta.ref_token = mItem.ref_token;
+                 combined.meta.contrast_token = mItem.contrast_token;
+                 combined.meta.logit_diffs = mItem.logit_diffs;
+            }
+
+            state.currentResult = combined; 
+            renderCaseView(combined);
+        } catch (e) {
+            showError(e.message);
+        }
+    }
+
+    function reRenderCurrentCase() {
+        if (state.currentResult) {
+            renderCaseView(state.currentResult);
+        }
+    }
+
+    function renderCaseView(data) {
+        const meta = data.meta;
+        document.getElementById('case-title').textContent = `Sample: ${meta.sample_id}`;
+        document.getElementById('case-subtitle').innerHTML = `
+            Target: <span style="background:#e8f5e9; padding:0 4px; border-radius:2px;">"${meta.ref_token}"</span> 
+            vs 
+            Contrast: <span style="background:#ffebee; padding:0 4px; border-radius:2px;">"${meta.contrast_token}"</span>`;
+        
+        // Metrics badge in header
+        let metricHtml = '';
+        const diffs = meta.logit_diffs || {};
+        data.modelNames.forEach(modelName => {
+             const styleClass = modelName === data.modelNames[0] ? 'badge-current' : 'badge-ref';
+             const val = diffs[modelName];
+             if (val !== undefined) {
+                 metricHtml += `<span class="metric-badge ${styleClass}">${modelName} Δ: ${val.toFixed(2)}</span>`;
+             }
+        });
+        document.getElementById('case-metrics').innerHTML = metricHtml;
+        
+        // Main Content Grid
+        const container = document.getElementById('content-area');
+        container.innerHTML = '';
+        container.style.display = 'grid'; // Ensure grid
+        container.style.gridTemplateColumns = '1fr 1fr';
+        container.style.gap = '20px';
+        container.style.overflowY = 'auto'; // scroll logic moved to host?
+
+        // 1. Render all Model Heatmaps
+        data.modelNames.forEach((name, idx) => {
+             const panel = document.createElement('div');
+             panel.className = 'panel';
+             panel.style.minHeight = '300px';
+             
+             // Header
+             const header = document.createElement('div');
+             header.className = 'panel-header';
+             header.innerHTML = `<span>${name}</span><span style="font-size: 12px; color: #666;">Attribution</span>`;
+             
+             // Body
+             const body = document.createElement('div');
+             body.className = 'panel-body';
+             body.id = `view-${name}`; // unique ID
+             
+             // Render actual heatmap
+             renderHeatmap(data.modelsData[name], body);
+             
+             panel.append(header, body);
+             container.appendChild(panel);
+        });
+
+        // 2. Render Scatter Plot Panel
+        const scatterPanel = document.createElement('div');
+        scatterPanel.className = 'panel';
+        scatterPanel.style.minHeight = '350px';
+        
+        // Header with Selectors
+        const header = document.createElement('div');
+        header.className = 'panel-header';
+        header.style.alignItems = 'center';
+        
+        // Create Selectors
+        const sel1 = createModelSelector(data.modelNames, data.modelNames[0]);
+        const sel2 = createModelSelector(data.modelNames, data.modelNames[1] || data.modelNames[0]);
+        
+        const label = document.createElement('span');
+        label.textContent = "Scatter: ";
+        
+        const vsLabel = document.createElement('span');
+        vsLabel.textContent = " vs ";
+        vsLabel.style.margin = "0 10px";
+
+        const controls = document.createElement('div');
+        controls.style.fontWeight = 'normal';
+        controls.append(sel1, vsLabel, sel2);
+
+        // Update chart when changed
+        const updateChart = () => {
+             renderAnalysis(data, sel1.value, sel2.value);
+        };
+        sel1.onchange = updateChart;
+        sel2.onchange = updateChart;
+
+        header.append(label, controls);
+        
+        // Body
+        const body = document.createElement('div');
+        body.className = 'panel-body';
+        body.style.overflow = 'hidden'; 
+        body.style.padding = '0';
+        
+        const canvas = document.createElement('canvas');
+        canvas.id = 'scatterChart';
+        body.appendChild(canvas);
+        
+        scatterPanel.append(header, body);
+        container.appendChild(scatterPanel);
+        
+        // Initial Chart Render
+        setTimeout(updateChart, 0);
+    }
+    
+    function createModelSelector(options, selected) {
+        const sel = document.createElement('select');
+        sel.style.padding = '2px';
+        options.forEach(opt => {
+             const el = document.createElement('option');
+             el.value = opt;
+             el.textContent = opt;
+             if (opt === selected) el.selected = true;
+             sel.appendChild(el);
+        });
+        return sel;
+    }
+    
+    // Helper to calculate normalization denominator
+    const SPECIAL_TOKENS_SET = new Set(['<|im_start|>', '<|im_end|>', '<think>', '</think>']);
+
+    function isSkipped(idx, tokens, hideFirst, hideSpecial) {
+        if (hideFirst && idx === 0) return true;
+        if (hideSpecial && tokens && tokens[idx]) {
+             const t = tokens[idx].trim();
+             if (SPECIAL_TOKENS_SET.has(t)) return true;
+        }
+        return false;
+    }
+
+    function getNormDenominator(relevance, tokens, hideFirst, hideSpecial) {
+        let rawVals = [];
+        for (let i = 0; i < relevance.length; i++) {
+             if (!isSkipped(i, tokens, hideFirst, hideSpecial)) {
+                 rawVals.push(relevance[i]);
+             }
+        }
+        if (rawVals.length === 0) return 1;
+
+        const method = document.getElementById('norm-method').value;
+
+        if (method === 'sum_signed') {
+             const sum = rawVals.reduce((a, b) => a + b, 0);
+             return Math.abs(sum) > 1e-9 ? Math.abs(sum) : 1;
+        }
+        
+        const vals = rawVals.map(Math.abs);
+        
+        if (method === 'sum') {
+             const sum = vals.reduce((a, b) => a + b, 0);
+             return sum > 1e-9 ? sum : 1;
+        } else {
+             const max = vals.length > 0 ? Math.max(...vals) : 1;
+             return max > 1e-9 ? max : 1;
+        }
+    }
+
+    let scatterChart = null;
+
+    function renderAnalysis(data, modelXName, modelYName) {
+        const dataX = data.modelsData[modelXName];
+        const dataY = data.modelsData[modelYName];
+
+        if (!dataX || !dataY) return;
+        
+        // Use X's tokens for normalization denom logic (assuming aligned tokenizer)
+        const tokens = dataX.tokens; 
+        const hideFirst = document.getElementById('hide-first').checked;
+        const hideSpecial = document.getElementById('hide-special').checked;
+
+        const getDenom = (d) => getNormDenominator(d.relevance, d.tokens, hideFirst, hideSpecial);
+        const denomX = getDenom(dataX);
+        const denomY = getDenom(dataY);
+        
+        const pts = [];
+        tokens.forEach((token, idx) => {
+             if (!isSkipped(idx, tokens, hideFirst, hideSpecial)) {
+                 const x = dataX.relevance[idx] / denomX;
+                 
+                 // If tokenization differs, this will break. But assuming same tokens for now.
+                 // Ideally we should align by token string or ID if models differ.
+                 // For now, simple index match.
+                 const yRel = dataY.relevance[idx]; // Unsafe if lengths differ
+                 const y = (yRel !== undefined) ? yRel / denomY : 0;
+                 
+                 pts.push({ x, y, token, idx });
+             }
+        });
+
+        // Datasets
+        const datasets = [{
+            label: `${modelYName} vs ${modelXName}`,
+            data: pts,
+            backgroundColor: 'rgba(54, 162, 235, 0.6)', 
+            borderColor: 'rgba(54, 162, 235, 1)',
+            pointStyle: 'circle',
+            pointRadius: 5
+        }];
+
+        // Identity Line
+        datasets.push({
+            label: 'y=x',
+            data: [{x: -1, y: -1}, {x: 1, y: 1}],
+            showLine: true,
+            fill: false,
+            borderColor: 'rgba(200, 200, 200, 0.5)',
+            borderDash: [5, 5],
+            pointRadius: 0
+        });
+
+        // Selected
+        datasets.push({
+            label: 'Selected',
+            data: [],
+            backgroundColor: '#ff9800', 
+            borderColor: '#f57c00',
+            pointRadius: 8,
+            pointStyle: 'star'
+        });
+
+        const ctx = document.getElementById('scatterChart').getContext('2d');
+        
+        if (scatterChart) {
+            scatterChart.destroy();
+        }
+        
+        scatterChart = new Chart(ctx, {
+            type: 'scatter',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (e, elements, chart) => {
+                    if (elements.length > 0) {
+                        const el = elements[0];
+                        const pt = chart.data.datasets[el.datasetIndex].data[el.index];
+                        if (pt && pt.idx !== undefined) {
+                            highlightToken(pt.idx);
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        min: -1,
+                        max: 1,
+                        title: { display: true, text: `${modelXName} (Normalized)` }
+                    },
+                    y: {
+                        min: -1,
+                        max: 1,
+                        title: { display: true, text: `${modelYName} (Normalized)` }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.dataset.label === 'y=x') return null; 
+                                const pt = context.raw;
+                                return `"${pt.token.trim()}" (${pt.x.toFixed(3)}, ${pt.y.toFixed(3)})`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Need to duplicate this primarily to make scope easier or just hoist updateTooltipPos
+    function updateTooltipPos(e, el) {
+        if (!el) el = document.getElementById('tooltip');
+        let x = e.clientX + 10;
+        let y = e.clientY + 15;
+        if (x + 150 > window.innerWidth) x = e.clientX - 160;
+        if (y + 40 > window.innerHeight) y = e.clientY - 40;
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+    }
+
+    function renderHeatmap(modelData, container) {
+        if (!modelData || !modelData.tokens || !modelData.relevance) {
+            container.innerHTML = '<div class="empty-state">Data missing</div>';
+            return;
+        }
+        
+        const tokens = modelData.tokens;
+        const relevance = modelData.relevance;
+        const hideFirst = document.getElementById('hide-first').checked;
+        const hideSpecial = document.getElementById('hide-special').checked;
+        
+        const denominator = getNormDenominator(relevance, tokens, hideFirst, hideSpecial);
+
+        container.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+
+        const tooltip = document.getElementById('tooltip');
+
+        tokens.forEach((token, idx) => {
+            const score = relevance[idx];
+            const span = document.createElement('span');
+            span.className = 'token';
+            span.textContent = token;
+            
+            // Assign ID for interaction
+            span.id = `${container.id}-tok-${idx}`;
+            span.onclick = () => highlightToken(idx); // allow clicking tokens too
+
+            // Raw Value on Hover
+            // Normalized value for Color
+            
+            let alpha = 0;
+            let color = 'transparent';
+
+            if (!isSkipped(idx, tokens, hideFirst, hideSpecial)) {
+                alpha = Math.abs(score) / denominator;
+                if (alpha > 1) alpha = 1;
+                
+                color = score > 0 
+                    ? `rgba(255, 0, 0, ${alpha * 0.6})` 
+                    : `rgba(0, 0, 255, ${alpha * 0.6})`;
+            }
+            
+            span.style.backgroundColor = color;
+            
+            // JS-based Tooltip
+            const tooltipText = `Attr: ${score.toExponential(2)}`;
+            span.onmouseenter = (e) => {
+                tooltip.textContent = tooltipText;
+                tooltip.style.display = 'block';
+                // Position initial
+                updateTooltipPos(e, tooltip);
+            };
+            span.onmousemove = (e) => updateTooltipPos(e, tooltip);
+            span.onmouseleave = () => {
+                tooltip.style.display = 'none';
+            };
+            
+            fragment.appendChild(span);
+        });
+
+        container.appendChild(fragment);
+    }
+
+    // Highlighting Logic
+    function highlightToken(idx) {
+        // Remove existing
+        document.querySelectorAll('.highlighted-token').forEach(el => el.classList.remove('highlighted-token'));
+        
+        // Add new to DOM
+        if (state.currentResult && state.currentResult.modelNames) {
+             state.currentResult.modelNames.forEach(name => {
+                  const el = document.getElementById(`view-${name}-tok-${idx}`);
+                  if (el) {
+                       el.classList.add('highlighted-token');
+                       try { el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' }); } catch(e){}
+                  }
+             });
+        }
+
+        // Update Chart
+        if (scatterChart) {
+            // Last dataset is Selected
+            const lastIdx = scatterChart.data.datasets.length - 1;
+            const selectedDS = scatterChart.data.datasets[lastIdx];
+            selectedDS.data = [];
+            
+            // Check main dataset (index 0)
+            const mainDS = scatterChart.data.datasets[0]; 
+            const pt = mainDS.data.find(d => d.idx === idx);
+            if (pt) selectedDS.data.push(pt);
+             
+             scatterChart.update();
+        }
+    }
+
+    // Utilities
+    function showError(msg) {
+        const el = document.getElementById('error-msg');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    
+    function hideError() {
+        document.getElementById('error-msg').style.display = 'none';
+    }
+
+    function refreshData() {
+        if (state.bench && !state.exp) loadExperiments(state.bench);
+        else if (state.bench && state.exp) loadManifest();
+        else loadBenchmarks();
+    }
+</script>
+<div id="tooltip"></div>
+</body>
+</html>
