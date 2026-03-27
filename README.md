@@ -185,6 +185,17 @@ def get_qwen3_map(module):
         # Add more layer types as needed
     }
 ```
+## 📦 Data
+
+**No data, traces, or prompts are released as part of this repository.** All analysis notebooks and scripts expect locally available benchmark data. To run the code, you must download the benchmarks directly from the official benchmark owners using their original links and licenses:
+
+- **GAIA2**: [https://huggingface.co/datasets/gaia-benchmark/GAIA](https://huggingface.co/datasets/gaia-benchmark/GAIA)
+- **IFEval**: [https://huggingface.co/datasets/google/IFEval](https://huggingface.co/datasets/google/IFEval)
+- **MATH**: [https://huggingface.co/datasets/hendrycks/competition_math](https://huggingface.co/datasets/hendrycks/competition_math)
+- **HumanEval**: [https://huggingface.co/datasets/openai/openai_humaneval](https://huggingface.co/datasets/openai/openai_humaneval)
+
+Please review and comply with each benchmark's license and terms of use before downloading or using the data.
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
