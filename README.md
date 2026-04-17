@@ -2,7 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.6.0+-ee4c2c.svg)](https://pytorch.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.9.0+-ee4c2c.svg)](https://pytorch.org/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/19-n4e1pB5JSKLWwds3QQlGfT2vcjH73e?usp=sharing)
+
+🌐 **Project Page:** <https://jzxycsjzy.github.io/Debug-XAI/>
+🚀 **Interactive Demo (Colab):** <https://colab.research.google.com/drive/19-n4e1pB5JSKLWwds3QQlGfT2vcjH73e?usp=sharing>
 
 This repository provides a comprehensive attribution analysis toolkit for Transformer-based models, supporting the paper **[Contrastive Attribution in the Wild (CAIW)](doc/CAIW.pdf)**. It combines Layer-wise Relevance Propagation (LRP) with contrastive attribution methods to enable in-depth interpretability analysis and failure debugging of large language models.
 
@@ -13,7 +17,7 @@ This repository provides a comprehensive attribution analysis toolkit for Transf
 - **Dual Implementation Modes**:
   - `lxt/efficient/`: Production-ready implementation using Input×Gradient framework (recommended)
   - `lxt/explicit/`: Research implementation for detailed mathematical exploration
-- **Multi-Model Support**: Pre-configured patches for Qwen3， LLaMA, Olmo3, etc.
+- **Multi-Model Support**: Pre-configured patches for Qwen3, LLaMA, Olmo3, etc.
 - **Memory-Efficient**: 4-bit quantization support via BitsAndBytes with gradient checkpointing
 
 ### 📊 Interactive Circuit Explorer
@@ -34,7 +38,7 @@ This repository provides a comprehensive attribution analysis toolkit for Transf
 ## 📁 Repository Structure
 
 ```
-Debug-XAI-main/
+Debug-XAI/
 ├── analysis_tool/              # Main attribution analysis toolkit
 │   ├── lxt/                    # Core LRP library (LRP-eXplains-Transformers)
 │   │   ├── efficient/          # Efficient LRP implementation (recommended)
@@ -77,7 +81,7 @@ Debug-XAI-main/
 │       └── analysis_IFEval.ipynb
 │
 └── doc/                        # Paper and documentation
-    └── CAIW.pdf                # Perview version of paper CAIW
+    └── CAIW.pdf                # Preview version of paper CAIW
 ```
 
 ## 🚀 Quick Start
@@ -92,12 +96,12 @@ Debug-XAI-main/
 
 ```bash
 # Navigate to the analysis tool directory
-cd Debug-XAI-main/analysis_tool
+cd Debug-XAI/analysis_tool
 
 # Create virtual environment (using uv - recommended)
 uv venv --python=3.11
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
 
 # Install the package
 pip install -e .
@@ -113,6 +117,8 @@ uv pip install -e .
 - `zennit` (LRP library)
 - `matplotlib`, `tabulate`
 - `open_clip_torch` (for vision models)
+
+### Usage
 
 #### 1. Interactive Circuit Explorer
 
@@ -141,7 +147,7 @@ uvicorn attnlrp_circuit.backend.app:app --host 0.0.0.0 --port 8000
 This toolkit implements **Layer-wise Relevance Propagation (LRP)** using an efficient Input×Gradient framework inspired by:
 
 > **A Close Look at Decomposition-based XAI-Methods for Transformer Language Models**  
-> Leila Arras, et al. "A Close Look at Decomposition-based XAI-Methods for Transformer Language Models。" arXiv preprint [arXiv:2502.15886 (2025)](https://arxiv.org/abs/2502.15886)
+> Leila Arras, et al. "A Close Look at Decomposition-based XAI-Methods for Transformer Language Models." arXiv preprint [arXiv:2502.15886 (2025)](https://arxiv.org/abs/2502.15886)
 
 ### Backpropagation Strategies
 
@@ -222,6 +228,8 @@ The `lxt` library components are based on:
 
 ## 🔗 Related Resources
 
+- **Project Page**: <https://jzxycsjzy.github.io/Debug-XAI/>
+- **Colab Demo**: <https://colab.research.google.com/drive/19-n4e1pB5JSKLWwds3QQlGfT2vcjH73e?usp=sharing>
 - **Full Documentation**: [analysis_tool/README.md](analysis_tool/README.md)
 - **Circuit Explorer Guide**: [attnlrp_circuit/README.md](analysis_tool/attnlrp_circuit/README.md)
 - **Example Scripts**: [examples/README.md](analysis_tool/examples/README.md)
