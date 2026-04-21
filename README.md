@@ -4,31 +4,35 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.9.0+-ee4c2c.svg)](https://pytorch.org/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/19-n4e1pB5JSKLWwds3QQlGfT2vcjH73e?usp=sharing)
+[![arXiv](https://img.shields.io/badge/arXiv-2604.17761-b31b1b.svg)](https://arxiv.org/abs/2604.17761)
 
 🌐 **Project Page:** <https://jzxycsjzy.github.io/Debug-XAI/>
 
 🚀 **Interactive Demo (Colab):** <https://colab.research.google.com/drive/19-n4e1pB5JSKLWwds3QQlGfT2vcjH73e?usp=sharing>
 
-This repository provides a comprehensive attribution analysis toolkit for Transformer-based models, supporting the paper **[Contrastive Attribution in the Wild (CAIW)](doc/CAIW.pdf)**. It combines Layer-wise Relevance Propagation (LRP) with contrastive attribution methods to enable in-depth interpretability analysis and failure debugging of large language models.
+📄 **Paper (arXiv):** <https://arxiv.org/abs/2604.17761>
+
+This repository provides a comprehensive attribution analysis toolkit for Transformer-based models. It combines Layer-wise Relevance Propagation (LRP) with contrastive attribution methods to enable in-depth interpretability analysis and failure debugging of large language models.
 
 ## 🌟 Key Features
 
-### 🔍 Advanced LRP Implementation
-- **Efficient AutoGrad-based LRP**: PyTorch automatic differentiation framework for fast attribution computation
-- **Dual Implementation Modes**:
-  - `lxt/efficient/`: Production-ready implementation using Input×Gradient framework (recommended)
-  - `lxt/explicit/`: Research implementation for detailed mathematical exploration
-- **Multi-Model Support**: Pre-configured patches for Qwen3, LLaMA, Olmo3, etc.
-- **Memory-Efficient**: 4-bit quantization support via BitsAndBytes with gradient checkpointing
+### 🔍 LRP Extensions on Top of AttnLRP / `lxt`
+Our attribution engine reuses [AttnLRP](https://github.com/rachtibat/LRP-eXplains-Transformers) and its `lxt` library as the underlying Input×Gradient LRP runtime — the propagation rules themselves are **not** our contribution. On top of this backbone, Debug-XAI contributes three extensions:
 
-### 📊 Interactive Circuit Explorer
-- **Web-based Visualization**: FastAPI backend + HTML/CSS/JS frontend for real-time exploration
-- **Layer-wise Analysis**: Visualize token-to-token relevance circuits between any two layers
-- **Multiple Backprop Strategies**:
-  - Max Logit: Standard attribution to highest-probability token
-  - Logit Difference: Contrastive attribution (top vs. reference tokens)
-  - Reference Token Comparison: User-defined contrast targets
-- **Graph Metrics**: Compute attribution statistics and circuit topology metrics
+- **Contrastive Attribution Objective**: Failure analysis is cast as attributing the logit difference $\Delta\ell = \ell(t_\text{tgt}) - \ell(t_\text{con})$ between an incorrect target token and a contrast alternative, implemented as first-class backprop modes (`max_logit`, `logit_diff` with `by_topk_avg` / `demean` / `by_ref_token`).
+- **Batch-Packed Multi-Target Backpropagation**: Our core method contribution — packing multiple attribution targets into the batch dimension so cross-layer attribution-graph edges are recovered in $O(\lceil n/B \rceil)$ backward passes instead of $O(n)$, making long-context (10k+ token) attribution graphs tractable.
+- **Graph Pruning + Coarse-to-Fine Analysis**: Global-threshold and per-layer cumulative-mass edge pruning, connected-subgraph extraction back to the final token, and a hidden-state-level → neuron-level refinement pipeline for long-context failure cases.
+
+Engineering add-ons (extended `lxt/efficient/models/` patches for Qwen3/Olmo3, 4-bit BitsAndBytes + gradient-checkpointing wiring) are bundled for convenience but are not claimed as method contributions.
+
+### 📊 Interactive Circuit Explorer (our main system contribution)
+Implemented in `analysis_tool/attnlrp_circuit/backend/` — a FastAPI service that turns raw LRP signals into browsable, quantifiable circuits.
+
+- **Attribution Engine (`core.py`) + Circuit Builder (`circuit.py`)**: Runs a single backward pass and materializes dense token-to-token connection matrices for every layer transition, with automatic Attn/MLP (mid-block) splitting when hooks are available.
+- **Cached Layer Transitions (`app.py`)**: Connection matrices are hashed by backprop config + layer set, so slider/UI interactions re-render without recomputing attribution.
+- **Graph Metric Suite (`graph_metrics.py`, `metrics.py`, `graph_metrics.md`)**: Layer-wise profiles covering connectivity/sparsity, information flow & Gini concentration, verticality (residual vs. mixing), and temporal dynamics of the circuit.
+- **Batch Analysis Harness (`batch_config.py`)**: Declarative configs for sweeping prompts, models, and backprop modes — the basis for the CAIW failure-case studies.
+- **Model Loader (`models/`)**: Unified loading of HF models with optional 4-bit quantization, shared between the web UI and batch runs.
 
 ### 🎯 Contrastive Attribution Analysis
 - **Benchmark Integration**: Pre-configured notebooks for GAIA2, HumanEval, IFEval, and MATH datasets
@@ -223,9 +227,12 @@ Contributions are welcome! Please:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-The `lxt` library components are based on:
+### Acknowledgment: `lxt` / AttnLRP
+
+The `analysis_tool/lxt/` subtree (both `efficient/` and `explicit/`) is derived from the **LRP-eXplains-Transformers (`lxt`)** library, released under the **BSD 3-Clause License**. We reuse it as the underlying Input×Gradient LRP runtime and contribute additional model patches, quantization-compatible wiring, and the circuit-analysis system built on top. All original copyright notices and the BSD-3-Clause terms from the upstream project are retained in the corresponding source files.
+
 > **AttnLRP: Attention-Aware Layer-Wise Relevance Propagation for Transformers**  
-> ICML 2024. [GitHub](https://github.com/rachtibat/LRP-eXplains-Transformers)  
+> Achtibat et al., ICML 2024. [GitHub](https://github.com/rachtibat/LRP-eXplains-Transformers) · License: [BSD-3-Clause](https://opensource.org/licenses/BSD-3-Clause)
 
 ## 🔗 Related Resources
 
@@ -237,3 +244,20 @@ The `lxt` library components are based on:
 
 > **Trademarks**  
 > This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft trademarks or logos is subject to and must follow [Microsoft’s Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general). Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship. Any use of third-party trademarks or logos are subject to those third-party’s policies.
+
+
+### 📚 Citation
+
+If you find this toolkit useful, please cite:
+
+```bibtex
+@misc{tan2026contrastiveattributionwildinterpretability,
+      title={Contrastive Attribution in the Wild: An Interpretability Analysis of LLM Failures on Realistic Benchmarks},
+      author={Rongyuan Tan and Jue Zhang and Zhuozhao Li and Qingwei Lin and Saravan Rajmohan and Dongmei Zhang},
+      year={2026},
+      eprint={2604.17761},
+      archivePrefix={arXiv},
+      primaryClass={cs.AI},
+      url={https://arxiv.org/abs/2604.17761},
+}
+```
